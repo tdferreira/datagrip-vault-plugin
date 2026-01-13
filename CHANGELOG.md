@@ -4,6 +4,11 @@
 
 ## Unreleased
 
+- Add support for Vault namespaces via `vault_namespace` connection property and `VAULT_NAMESPACE` environment variable.
+- Add compatibility with Vault KV v2 API when using `vault_secret`:
+  - Automatically recognizes/handles KV v2 `/data/` endpoints.
+  - Correctly parses KV v2 response structure where credentials are nested under `data.data`.
+
 ## 1.3.6 - 2025-08-01
 
 - Changelog update - `v1.3.5` by @github-actions[bot] in https://github.com/premium-minds/datagrip-vault-plugin/pull/57
