@@ -156,7 +156,7 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
         logVaultResponse(response);
 
         if (response.statusCode() != HttpURLConnection.HTTP_OK) {
-            throw new RuntimeException("Problem connecting to Vault: " + response.body());
+            throw vaultReadSecretException(request, response);
         }
 
         final var gson = new GsonBuilder()
@@ -209,11 +209,61 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
         logVaultResponse(response);
 
         if (response.statusCode() != HttpURLConnection.HTTP_OK) {
-            logger.info("No lease found for " + leaseId);
+            // Lease lookup can legitimately return 404 in some setups, so keep it non-fatal.
+            logger.info("No lease found for " + leaseId + ". " + vaultHttpMessage("Vault lease lookup failed", request, response));
             return Optional.empty();
         }
 
         return Optional.of(gson.fromJson(response.body(), LeaseResponse.class));
+    }
+
+    private static RuntimeException vaultHttpException(String prefix, HttpRequest request, HttpResponse<String> response) {
+        return new RuntimeException(vaultHttpMessage(prefix, request, response));
+    }
+
+    private static String vaultHttpMessage(String prefix, HttpRequest request, HttpResponse<String> response) {
+        final StringBuilder sb = new StringBuilder();
+        sb.append(prefix)
+                .append(": status=")
+                .append(response.statusCode())
+                .append(", uri=")
+                .append(request.uri());
+
+        final String body = response.body();
+        final String vaultErrors = extractVaultErrors(body);
+        if (vaultErrors != null) {
+            sb.append(", errors=").append(vaultErrors);
+        } else if (body != null && !body.isBlank()) {
+            // Fallback: still include body for debugging, but trim it a bit.
+            sb.append(", body=").append(truncate(body, 2000));
+        }
+
+        return sb.toString();
+    }
+
+    /**
+     * Extract Vault {"errors":[...]} into a readable string.
+     * Returns null when there's no meaningful error message (e.g. {"errors":[]}).
+     */
+    private static @Nullable String extractVaultErrors(@Nullable String body) {
+        if (body == null || body.isBlank()) return null;
+
+        try {
+            final var err = new Gson().fromJson(body, VaultErrorResponse.class);
+            if (err == null || err.getErrors() == null || err.getErrors().isEmpty()) {
+                return null;
+            }
+            // Join with "; " because Vault can return multiple.
+            return String.join("; ", err.getErrors());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static String truncate(String s, int maxLen) {
+        if (s == null) return null;
+        if (s.length() <= maxLen) return s;
+        return s.substring(0, Math.max(0, maxLen - 3)) + "...";
     }
 
     private static URI buildVaultReadUri(String address, String secret) {
@@ -424,5 +474,30 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
                 throw new RuntimeException("Problem reading from Vault Token Helper: " + e.getMessage(), e);
             }
         }
+    }
+
+    private static RuntimeException vaultReadSecretException(HttpRequest request, HttpResponse<String> response) {
+        if (response.statusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
+            final StringBuilder sb = new StringBuilder();
+            sb.append("Vault secret not found (404). ")
+                    .append("Check that the secret path exists and your token has access. ")
+                    .append("uri=")
+                    .append(request.uri());
+
+            // Add a small hint for the most common foot-gun: KV v2 missing /data/.
+            final String path = request.uri().getPath();
+            if (path != null && path.startsWith("/v1/") && !path.contains("/data/")) {
+                sb.append(". If you are using a KV v2 engine, the read endpoint is /v1/<mount>/data/<path>.");
+            }
+
+            final String vaultErrors = extractVaultErrors(response.body());
+            if (vaultErrors != null) {
+                sb.append(" Vault says: ").append(vaultErrors);
+            }
+
+            return new RuntimeException(sb.toString());
+        }
+
+        return vaultHttpException("Problem connecting to Vault", request, response);
     }
 }
