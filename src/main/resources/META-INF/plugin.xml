@@ -7,8 +7,13 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.database</depends>
 
+    <extensions defaultExtensionNs="com.intellij">
+        <notificationGroup id="Vault Auth" displayType="BALLOON" isLogByDefault="true"/>
+    </extensions>
+
     <extensions defaultExtensionNs="com.intellij.database">
-        <connectionInterceptor implementation="com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider"></connectionInterceptor>
+        <connectionInterceptor implementation="com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider"/>
+        <databaseAuthProvider implementation="com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider"/>
     </extensions>
 
 </idea-plugin>

@@ -1,5 +1,22 @@
 package com.premiumminds.datagrip.vault;
 
+import com.google.gson.FieldNamingPolicy;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.intellij.database.access.DatabaseCredentials;
+import com.intellij.database.dataSource.DatabaseAuthProvider;
+import com.intellij.database.dataSource.DatabaseConnectionConfig;
+import com.intellij.database.dataSource.DatabaseConnectionPoint;
+import com.intellij.notification.NotificationGroupManager;
+import com.intellij.notification.NotificationType;
+import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.project.Project;
+import org.jetbrains.annotations.Nls;
+import org.jetbrains.annotations.NonNls;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -18,20 +35,6 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import com.google.gson.FieldNamingPolicy;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.intellij.database.access.DatabaseCredentials;
-import com.intellij.database.dataSource.DatabaseAuthProvider;
-import com.intellij.database.dataSource.DatabaseConnectionConfig;
-import com.intellij.database.dataSource.DatabaseConnectionPoint;
-import com.intellij.openapi.diagnostic.Logger;
-import com.intellij.openapi.project.Project;
-import org.jetbrains.annotations.Nls;
-import org.jetbrains.annotations.NonNls;
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
 
@@ -115,11 +118,26 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
             protoConnection.getConnectionProperties().put("user", value.getData().getUsername());
             protoConnection.getConnectionProperties().put("password", value.getData().getPassword());
 
-        } catch (IOException | InterruptedException e) {
-            throw new RuntimeException("Problem connecting to Vault: " + e.getMessage(), e);
-        }
+            return CompletableFuture.completedFuture(protoConnection);
 
-        return CompletableFuture.completedFuture(protoConnection);
+        } catch (Exception e) {
+            String message = (e.getCause() != null) ? e.getCause().getMessage() : e.getMessage();
+            if (message == null) message = "Unknown error connecting to Vault";
+
+            // Show a user-friendly notification
+            var groupManager = NotificationGroupManager.getInstance();
+            var group = groupManager.getNotificationGroup("Vault Auth");
+            if (group != null) {
+                group.createNotification("Vault authentication failed", message, NotificationType.ERROR)
+                        .notify(null);
+            } else {
+                logger.warn("Vault Auth Error: " + message);
+            }
+
+            // Return a failed stage with ProcessCanceledException.
+            // This tells the platform to stop the process without showing a secondary error report.
+            return CompletableFuture.failedStage(new ProcessCanceledException(e));
+        }
     }
 
     @Override
@@ -166,7 +184,16 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
 
         final var parsed = gson.fromJson(response.body(), DynamicSecretResponse.class);
         if (parsed == null || parsed.getData() == null) {
-            throw new RuntimeException("Vault response didn't include credentials fields (username/password). Response was: " + response.body());
+            throw new RuntimeException("Vault response didn't include the expected credentials fields (username/password). " +
+                    "Check that the secret exists and contains those keys. uri=" + request.uri() +
+                    ", body=" + truncate(response.body(), 2000));
+        }
+
+        if (parsed.getData().getUsername() == null || parsed.getData().getUsername().isBlank()
+                || parsed.getData().getPassword() == null || parsed.getData().getPassword().isBlank()) {
+            throw new RuntimeException("Vault secret was read but is missing/empty username and/or password keys. " +
+                    "uri=" + request.uri() +
+                    ". Ensure the secret has non-empty 'username' and 'password' values.");
         }
 
         return parsed;
@@ -496,6 +523,10 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
             }
 
             return new RuntimeException(sb.toString());
+        }
+
+        if (response.statusCode() == HttpURLConnection.HTTP_FORBIDDEN || response.statusCode() == HttpURLConnection.HTTP_UNAUTHORIZED) {
+            return vaultHttpException("Vault access denied (check token/namespace/policy)", request, response);
         }
 
         return vaultHttpException("Problem connecting to Vault", request, response);
