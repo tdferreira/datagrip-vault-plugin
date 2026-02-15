@@ -4,10 +4,13 @@
 
 ## Unreleased
 
-- Add support for Vault namespaces via `vault_namespace` connection property and `VAULT_NAMESPACE` environment variable.
-- Add compatibility with Vault KV v2 API when using `vault_secret`:
-  - Automatically recognizes/handles KV v2 `/data/` endpoints.
-  - Correctly parses KV v2 response structure where credentials are nested under `data.data`.
+- Support Vault Database dynamic secrets and KV v2 secrets as separate authentication options.
+- KV v2 secrets have support for Vault namespaces via `vault_namespace` connection property and `VAULT_NAMESPACE` environment variable.
+- Add KV v2 support with path normalization to `/data/` endpoints and correct response parsing under `data.data`.
+- Improve Vault error handling and surface configuration failures during test connection.
+- Avoid leaking Vault response bodies in exceptions; response body logging is opt-in via a system property.
+- Ignore IDE placeholder env values (`$VAULT_*`) when resolving Vault address/namespace/config path.
+- Update local testing scripts (dynamic + KV v2) with cleanup, stop mode, port checks, and readiness waits.
 
 ## 1.3.6 - 2025-08-01
 
