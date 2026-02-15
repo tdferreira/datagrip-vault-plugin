@@ -6,13 +6,13 @@
 
 <!-- Plugin description -->
 
-This plugin provides database credentials using [Vault dynamic secrets](https://www.vaultproject.io/docs/secrets/databases) and KV secrets.
+This plugin provides database credentials using [Vault dynamic secrets](https://www.vaultproject.io/docs/secrets/databases) and [KV v2](https://developer.hashicorp.com/vault/docs/secrets/kv/kv-v2) secrets.
 
 Vault login is not handled by this plugin. 
 
 You should manually log in into Vault, which will, using the default [Token Helper](https://www.vaultproject.io/docs/commands/token-helper), create a Vault token file in `$HOME/.vault-token`. Check another [Vault Token Helper](https://github.com/joemiller/vault-token-helper) with support for native secret storage on macOS, Linux, and Windows.
 
-This plugin will cache credentials in memory until it expires.
+The Dynamic secret Auth provider on this plugin will cache credentials in memory until it expires.
 
 Authentication options:
 - Vault (Dynamic secret): for Vault Database secrets engine dynamic credentials.
