@@ -44,9 +44,13 @@ Use the helper scripts to start/stop local Vault dev servers with Postgres:
 - Dynamic secrets example:
   - Start: `./docker-postgres-vault-example.sh`
   - Stop: `./docker-postgres-vault-example.sh --stop`
+  - Vault: `http://127.0.0.1:8201` (cluster port 8202)
+  - Postgres: `localhost:5432`
 - KV v2 example:
   - Start: `./docker-postgres-vault-kv2-example.sh`
   - Stop: `./docker-postgres-vault-kv2-example.sh --stop`
+  - Vault: `http://127.0.0.1:8203` (cluster port 8204)
+  - Postgres: `localhost:5434`
 
 ## Limitations
 
