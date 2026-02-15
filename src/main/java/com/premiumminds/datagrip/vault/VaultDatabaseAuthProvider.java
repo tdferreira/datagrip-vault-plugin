@@ -306,22 +306,29 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
         logger.debug(sb.toString());
     }
 
+    private static boolean containsEnvPlaceholder(String value, String envVarName) {
+        return value != null && value.contains("$" + envVarName + "$");
+    }
+
     protected String getAddress(ProtoConnection protoConnection) {
         final var definedAddress = protoConnection.getConnectionPoint().getAdditionalProperty(PROP_ADDRESS);
         if (definedAddress != null && !definedAddress.isBlank()) {
-            return definedAddress;
+            if (!containsEnvPlaceholder(definedAddress, ENV_VAULT_AGENT_ADDR)
+                    && !containsEnvPlaceholder(definedAddress, ENV_VAULT_ADDR)) {
+                return definedAddress;
+            }
         } else {
             final String vaultAgentAddrEnv = System.getenv(ENV_VAULT_AGENT_ADDR);
             if (vaultAgentAddrEnv != null && !vaultAgentAddrEnv.isBlank()) {
                 final String trimmed = vaultAgentAddrEnv.trim();
-                if (!"$VAULT_AGENT_ADDR$".equals(trimmed)) {
+                if (!containsEnvPlaceholder(trimmed, ENV_VAULT_AGENT_ADDR)) {
                     return trimmed;
                 }
             }
             final String vaultAddrEnv = System.getenv(ENV_VAULT_ADDR);
             if (vaultAddrEnv != null && !vaultAddrEnv.isBlank()) {
                 final String trimmed = vaultAddrEnv.trim();
-                if (!"$VAULT_ADDR$".equals(trimmed)) {
+                if (!containsEnvPlaceholder(trimmed, ENV_VAULT_ADDR)) {
                     return trimmed;
                 }
             }
@@ -368,7 +375,10 @@ public class VaultDatabaseAuthProvider implements DatabaseAuthProvider {
 
         final String vaultConfigPathEnv = System.getenv(ENV_VAULT_CONFIG_PATH);
         if (vaultConfigPathEnv != null && !vaultConfigPathEnv.isBlank()) {
-            vaultConfigPath = Paths.get(vaultConfigPathEnv);
+            final String trimmed = vaultConfigPathEnv.trim();
+            if (!containsEnvPlaceholder(trimmed, ENV_VAULT_CONFIG_PATH)) {
+                vaultConfigPath = Paths.get(trimmed);
+            }
         }
 
         return vaultConfigPath;
