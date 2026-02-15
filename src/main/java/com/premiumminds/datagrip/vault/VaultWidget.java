@@ -16,7 +16,6 @@ import com.intellij.uiDesigner.core.GridLayoutManager;
 import org.jetbrains.annotations.NotNull;
 
 import static com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider.PROP_ADDRESS;
-import static com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider.PROP_NAMESPACE;
 import static com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider.PROP_SECRET;
 import static com.premiumminds.datagrip.vault.VaultDatabaseAuthProvider.PROP_TOKEN_FILE;
 
@@ -24,7 +23,6 @@ public class VaultWidget implements DatabaseAuthProvider.AuthWidget {
 
     private JPanel panel;
     private JBTextField addressText;
-    private JBTextField namespaceText;
     private JBTextField secretText;
     private JBTextField tokenFileText;
 
@@ -33,40 +31,33 @@ public class VaultWidget implements DatabaseAuthProvider.AuthWidget {
         final var vaultBundle = new VaultBundle();
 
         addressText = new JBTextField();
-        namespaceText = new JBTextField();
         secretText = new JBTextField();
         tokenFileText = new JBTextField();
 
         addressText.getEmptyText().setText("e.g.: http://example.com");
-        namespaceText.getEmptyText().setText("e.g.: MY_NAMESPACE");
-        secretText.getEmptyText().setText("e.g.: secret/my-secret");
+        secretText.getEmptyText().setText("e.g.: database/creds/my-role or kv/my-secret");
         tokenFileText.getEmptyText().setText("Default: $HOME/.vault-token");
 
-        panel = new JPanel(new GridLayoutManager(4, 6));
+        panel = new JPanel(new GridLayoutManager(3, 6));
 
         final var secretLabel = new JBLabel(vaultBundle.getMessage("secret"));
         final var addressLabel = new JBLabel(vaultBundle.getMessage("address"));
-        final var namespaceLabel = new JBLabel(vaultBundle.getMessage("namespace"));
         final var tokenFileLabel = new JBLabel(vaultBundle.getMessage("tokenFile"));
 
         panel.add(addressLabel, createLabelConstraints(0, 0, addressLabel.getPreferredSize().getWidth()));
         panel.add(addressText, createSimpleConstraints(0, 1, 3));
 
-        panel.add(namespaceLabel, createLabelConstraints(1, 0, namespaceLabel.getPreferredSize().getWidth()));
-        panel.add(namespaceText, createSimpleConstraints(1, 1, 3));
+        panel.add(secretLabel, createLabelConstraints(1, 0, secretLabel.getPreferredSize().getWidth()));
+        panel.add(secretText, createSimpleConstraints(1, 1, 3));
 
-        panel.add(secretLabel, createLabelConstraints(2, 0, secretLabel.getPreferredSize().getWidth()));
-        panel.add(secretText, createSimpleConstraints(2, 1, 3));
-
-        panel.add(tokenFileLabel, createLabelConstraints(3, 0, tokenFileLabel.getPreferredSize().getWidth()));
-        panel.add(tokenFileText, createSimpleConstraints(3, 1, 3));
+        panel.add(tokenFileLabel, createLabelConstraints(2, 0, tokenFileLabel.getPreferredSize().getWidth()));
+        panel.add(tokenFileText, createSimpleConstraints(2, 1, 3));
     }
 
     @Override
     public void save(@NotNull final DatabaseConnectionConfig config, final boolean copyCredentials) {
         config.setAdditionalProperty(PROP_SECRET, secretText.getText());
         config.setAdditionalProperty(PROP_ADDRESS, addressText.getText());
-        config.setAdditionalProperty(PROP_NAMESPACE, namespaceText.getText());
         config.setAdditionalProperty(PROP_TOKEN_FILE, tokenFileText.getText());
     }
 
@@ -74,7 +65,6 @@ public class VaultWidget implements DatabaseAuthProvider.AuthWidget {
     public void reset(@NotNull final DatabaseConnectionPoint point, final boolean resetCredentials) {
         secretText.setText(point.getAdditionalProperty(PROP_SECRET));
         addressText.setText(point.getAdditionalProperty(PROP_ADDRESS));
-        namespaceText.setText(point.getAdditionalProperty(PROP_NAMESPACE));
         tokenFileText.setText(point.getAdditionalProperty(PROP_TOKEN_FILE));
     }
 

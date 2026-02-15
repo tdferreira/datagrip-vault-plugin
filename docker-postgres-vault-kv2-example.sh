@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# https://learn.hashicorp.com/tutorials/vault/database-secrets
 set -euo pipefail
 
+# Starts a local Vault dev server with a KV v2 mount and a sample secret.
+# Also starts a local Postgres container so you can test the plugin end-to-end.
+#
 # Usage:
-#   ./docker-postgres-vault-example.sh        # start
-#   ./docker-postgres-vault-example.sh --stop # stop vault + container
+#   ./docker-postgres-vault-kv2-example.sh        # start
+#   ./docker-postgres-vault-kv2-example.sh --stop # stop vault + container
 
-export VAULT_ADDR='http://127.0.0.1:8201'
+export VAULT_ADDR='http://127.0.0.1:8203'
 export VAULT_TOKEN='root'
 
-POSTGRES_CONTAINER_NAME='datagrip-vault-postgres'
-POSTGRES_PORT='5432'
-POSTGRES_USER='root'
-POSTGRES_PASSWORD='rootpassword'
+POSTGRES_CONTAINER_NAME='datagrip-vault-kv2-postgres'
+POSTGRES_PORT='5434'
+POSTGRES_USER='example_user'
+POSTGRES_PASSWORD='example_pass'
 POSTGRES_DB='postgres'
 
 MODE=${1:-""}
@@ -56,6 +58,45 @@ kill_vault_on_ports() {
   fi
 }
 
+ensure_ports_available() {
+  if ! command -v lsof > /dev/null 2>&1; then
+    echo "lsof not found; skipping port checks." >&2
+    return 0
+  fi
+  local ports=("$@")
+  local all_pids=""
+  for port in "${ports[@]}"; do
+    local pids
+    pids=$(lsof -tiTCP:"${port}" -sTCP:LISTEN || true)
+    if [[ -n "${pids}" ]]; then
+      echo "Port ${port} is already in use by PID(s): ${pids}"
+      all_pids="${all_pids} ${pids}"
+    fi
+  done
+  local uniq_pids
+  uniq_pids=$(echo "${all_pids}" | tr ' ' '\n' | sed '/^$/d' | sort -u | tr '\n' ' ')
+  if [[ -n "${uniq_pids}" ]]; then
+    for pid in ${uniq_pids}; do
+      local cmd
+      cmd=$(ps -p "${pid}" -o comm= | tr -d '\n')
+      if [[ -n "${cmd}" ]]; then
+        echo "- ${pid}: ${cmd}"
+      fi
+    done
+    read -r -p "Kill these process(es)? [y/N] " answer
+    case "${answer}" in
+      [yY][eE][sS]|[yY])
+        echo "Killing PID(s): ${uniq_pids}"
+        kill ${uniq_pids}
+        ;;
+      *)
+        echo "Aborting." >&2
+        exit 1
+        ;;
+    esac
+  fi
+}
+
 if [[ "${MODE}" == "--stop" ]]; then
   container_removed=0
   killed_any=0
@@ -63,7 +104,7 @@ if [[ "${MODE}" == "--stop" ]]; then
     cleanup_container "${POSTGRES_CONTAINER_NAME}"
     container_removed=1
   fi
-  kill_vault_on_ports 8201 8202
+  kill_vault_on_ports 8203 8204
   if [[ "${container_removed}" -eq 1 ]]; then
     echo "Docker container removed: ${POSTGRES_CONTAINER_NAME}"
   fi
@@ -74,7 +115,7 @@ if [[ "${MODE}" == "--stop" ]]; then
 fi
 
 cleanup_container "${POSTGRES_CONTAINER_NAME}"
-ensure_ports_available 8201 8202
+ensure_ports_available 8203 8204
 
 docker run \
   --detach \
@@ -99,42 +140,24 @@ if ! docker exec "${POSTGRES_CONTAINER_NAME}" pg_isready -U "${POSTGRES_USER}" -
   exit 1
 fi
 
-docker exec -i \
-    "${POSTGRES_CONTAINER_NAME}" \
-    psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "CREATE ROLE \"ro\" NOINHERIT;"
-
-docker exec -i \
-    "${POSTGRES_CONTAINER_NAME}" \
-    psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -c "GRANT SELECT ON ALL TABLES IN SCHEMA public TO \"ro\";"
-
-vault server -dev -dev-root-token-id root -dev-listen-address=127.0.0.1:8201 &
+vault server -dev -dev-root-token-id root -dev-listen-address=127.0.0.1:8203 &
 VAULT_PID=$!
 
 sleep 1
 
-vault secrets enable database
+vault secrets enable -path=kv kv-v2
+vault kv put kv/my_db_credentials db_user="${POSTGRES_USER}" db_pass="${POSTGRES_PASSWORD}"
 
-vault write database/config/postgresql \
-     plugin_name=postgresql-database-plugin \
-     connection_url="postgresql://{{username}}:{{password}}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable" \
-     allowed_roles=readonly \
-     username="${POSTGRES_USER}" \
-     password="${POSTGRES_PASSWORD}"
-
-vault write database/roles/readonly \
-      db_name=postgresql \
-      creation_statements="CREATE ROLE \"{{name}}\" WITH LOGIN PASSWORD '{{password}}' VALID UNTIL '{{expiration}}' INHERIT; GRANT ro TO \"{{name}}\";" \
-      default_ttl=1h \
-      max_ttl=24h
-
-vault read database/creds/readonly
+vault kv get kv/my_db_credentials
 
 cat <<INFO
 
 Vault dev server running (PID: ${VAULT_PID})
 - Vault address: ${VAULT_ADDR}
 - Vault token: ${VAULT_TOKEN}
-- Vault secret: database/creds/readonly
+- KV v2 secret path: kv/my_db_credentials (read endpoint: kv/data/my_db_credentials)
+- KV v2 username key: db_user
+- KV v2 password key: db_pass
 
 Postgres container running: ${POSTGRES_CONTAINER_NAME}
 - Host: localhost

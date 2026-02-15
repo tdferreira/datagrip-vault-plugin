@@ -2,6 +2,9 @@ package com.premiumminds.datagrip.vault;
 
 import java.util.Objects;
 
+/**
+ * Cache key for dynamic database secrets, scoped by Vault address and secret path.
+ */
 public class DynamicSecretKey {
 
     private final String address;
@@ -34,6 +37,7 @@ public class DynamicSecretKey {
         if (getClass() != obj.getClass())
             return false;
         DynamicSecretKey other = (DynamicSecretKey) obj;
-        return Objects.equals(address, other.address) && Objects.equals(secret, other.secret);
+        return Objects.equals(address, other.address)
+                && Objects.equals(secret, other.secret);
     }
 }
