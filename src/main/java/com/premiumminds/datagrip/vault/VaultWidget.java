@@ -35,7 +35,7 @@ public class VaultWidget implements DatabaseAuthProvider.AuthWidget {
         tokenFileText = new JBTextField();
 
         addressText.getEmptyText().setText("e.g.: http://example.com");
-        secretText.getEmptyText().setText("e.g.: database/creds/my-role");
+        secretText.getEmptyText().setText("e.g.: secret/my-secret");
         tokenFileText.getEmptyText().setText("Default: $HOME/.vault-token");
 
         panel = new JPanel(new GridLayoutManager(3, 6));
